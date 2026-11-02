@@ -1,0 +1,124 @@
+"""
+Módulo del motor de recomendaciones personalizadas para la aplicación "100%LIFE".
+
+Este módulo procesa el perfil del estudiante atleta (estado de actividad física,
+medidas corporales y horarios) para generar sugerencias adaptadas de rutinas,
+nutrición, hidratación y balance entre la vida académica y deportiva.
+"""
+
+
+def generate_recommendations(user_profile: dict) -> dict:
+    """
+    Genera recomendaciones personalizadas de salud, nutrición, hidratación y balance
+    escolar/deportivo basándose en el perfil del usuario.
+
+    Reglas de negocio aplicadas:
+    - Regla 1: Si exercise_status es "Si", incluye opciones de estiramiento y rendimiento.
+    - Regla 2: Si es "No pero quiere", asigna un entrenamiento ligero y progresivo.
+    - Regla 3: Si es "No", entrega consejos generales de nutrición, hidratación y balance diario.
+
+    Casos borde gestionados:
+    - Si el diccionario user_profile está vacío, es nulo o ausente de claves necesarias,
+      se utiliza un perfil base de respaldo por defecto para evitar errores (KeyError).
+    - Si las medidas corporales o los horarios presentan valores extremos, nulos o faltantes,
+      se devuelven recomendaciones estandarizadas y seguras.
+
+    Args:
+        user_profile (dict): Diccionario que contiene las claves 'exercise_status', 
+                             'measures' (peso, estatura) y 'schedule' (horarios).
+
+    Returns:
+        dict: Un diccionario estructurado con las claves ['rutina', 'nutricion', 
+              'hidratacion', 'balance_vida'], cada una conteniendo una lista de sugerencias en texto.
+    """
+    # Caso borde: Perfil de usuario vacío, nulo o no válido, asignar un respaldo seguro
+    if not isinstance(user_profile, dict) or not user_profile:
+        user_profile = {
+            "exercise_status": "No",
+            "measures": {},
+            "schedule": {}
+        }
+
+    # Extraer el estado de ejercicio asegurando robustez ante ausencias de claves
+    exercise_status = str(user_profile.get("exercise_status", "No")).strip().lower()
+    
+    # Extraer medidas y horarios para posibles análisis futuros o respaldos
+    measures = user_profile.get("measures", {})
+    if not isinstance(measures, dict):
+        measures = {}
+        
+    schedule = user_profile.get("schedule", {})
+    if not isinstance(schedule, dict):
+        schedule = {}
+
+    # Estructura base para las recomendaciones
+    recommendations = {
+        "rutina": [],
+        "nutricion": [],
+        "hidratacion": [],
+        "balance_vida": []
+    }
+
+    # Bloque de Hidratación (General y aplicable a cualquier perfil)
+    recommendations["hidratacion"] = [
+        "Consume al menos de 2 a 2.5 litros de agua al día para mantener un rendimiento óptimo.",
+        "Bebe agua antes, durante y después de tus actividades físicas o escolares.",
+        "Evita bebidas azucaradas o energizantes en exceso; prefiere agua natural o electrolitos moderados."
+    ]
+
+    # Rama condicional según el estado de ejercicio del estudiante atleta
+    if exercise_status in ["si", "sí", "yes"]:
+        # Regla 1: Usuario activo ("Si") -> Opciones de estiramiento y rendimiento avanzado
+        recommendations["rutina"] = [
+            "Realiza rutinas de estiramiento dinámico antes de entrenar y estiramiento estático al finalizar.",
+            "Incorpora días de recuperación activa y descanso muscular para prevenir lesiones.",
+            "Enfócate en la técnica y la progresión de cargas en tus entrenamientos principales."
+        ]
+        recommendations["nutricion"] = [
+            "Aumenta el consumo de carbohidratos complejos (avena, arroz integral, papa) para asegurar energía en los entrenamientos.",
+            "Consume proteínas de alta calidad (pollo, pescado, huevo, legumbres) después de entrenar para apoyar la recuperación muscular.",
+            "Incluye grasas saludables (aguacate, frutos secos, aceite de oliva) para el correcto funcionamiento hormonal."
+        ]
+        recommendations["balance_vida"] = [
+            "Planifica tus horarios de estudio antes de las sesiones de entrenamiento para evitar el estrés académico.",
+            "Duerme entre 8 y 9 horas diarias; el descanso es crucial para el crecimiento y rendimiento del atleta joven.",
+            "Aprovecha los fines de semana para organizar tus pendientes escolares y tener tiempo de ocio."
+        ]
+
+    elif "quiere" in exercise_status or exercise_status in ["no pero quiere", "tal vez", "empezar"]:
+        # Regla 2: Usuario interesado en empezar ("No pero quiere") -> Entrenamiento ligero y progresivo
+        recommendations["rutina"] = [
+            "Comienza con entrenamientos ligeros de 20 a 30 minutos, de 3 veces por semana.",
+            "Incluye caminatas rápidas, trote suave o ejercicios de peso corporal (sentadillas asistidas, lagartijas inclinadas).",
+            "Prioriza la constancia sobre la intensidad en tus primeras semanas de adaptación."
+        ]
+        recommendations["nutricion"] = [
+            "Asegura tres comidas principales equilibradas incorporando vegetales, proteínas y porciones moderadas de carbohidratos.",
+            "Evita saltarte comidas, especialmente el desayuno, para mantener la concentración en clases.",
+            "Elige snacks saludables como fruta fresca o un puñado de nueces entre clases."
+        ]
+        recommendations["balance_vida"] = [
+            "Dedica bloques cortos de 15 minutos diarios a la actividad física para crear el hábito sin descuidar la escuela.",
+            "Establece prioridades diarias utilizando una agenda o calendario digital.",
+            "Mantén una actitud abierta al cambio y celebra tus pequeños avances semanales."
+        ]
+
+    else:
+        # Regla 3: Usuario inactivo ("No") -> Consejos de nutrición, hidratación y balance diario
+        recommendations["rutina"] = [
+            "Realiza pausas activas cada hora de estudio: levántate, camina y estira los brazos y piernas durante 5 minutos.",
+            "Explora caminatas cortas al aire libre para despejar la mente después de clases.",
+            "No hay presión por hacer ejercicio intenso; enfócate en moverte de forma natural durante tu día."
+        ]
+        recommendations["nutricion"] = [
+            "Controla el consumo de comida rápida o ultraprocesados durante los días de alta carga escolar.",
+            "Incrementa el consumo de fibra a través de frutas y verduras frescas.",
+            "Vigila el tamaño de tus porciones para mantener un equilibrio energético saludable."
+        ]
+        recommendations["balance_vida"] = [
+            "Diseña un espacio de estudio ordenado y libre de distracciones para mejorar tu productividad académica.",
+            "Dedica tiempo a actividades recreativas o pasatiempos que reduzcan el estrés escolar.",
+            "Asegura un horario de sueño constante para evitar la fatiga mental crónica."
+        ]
+
+    return recommendations

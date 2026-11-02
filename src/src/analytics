@@ -1,0 +1,170 @@
+"""
+Módulo de análisis de datos y generación de gráficos para la aplicación "100%LIFE".
+
+Este módulo utiliza Pandas para procesar y limpiar el historial de entrenamientos
+de los estudiantes atletas, y Matplotlib para generar visualizaciones gráficas
+estéticas y claras del desempeño físico a lo largo del tiempo.
+"""
+
+import pandas as pd
+import matplotlib.pyplot as plt
+from matplotlib.figure import Figure
+
+
+def create_workout_summary_df(workout_list: list[dict]) -> pd.DataFrame:
+    """
+    Convierte una lista de diccionarios de entrenamientos en un DataFrame de Pandas 
+    limpio con los tipos de datos adecuados.
+
+    Casos borde gestionados:
+    - Si la lista está vacía o no es válida, retorna un DataFrame vacío con las columnas esperadas.
+    - Si faltan columnas en algunos diccionarios, se autocompletarán con valores por defecto.
+    - Se rellenan los valores nulos (NaN) en la duración con 0 y las fechas/tipos con valores genéricos.
+    - Convierte la columna 'fecha' a formato datetime y 'duracion' a numérico.
+
+    Args:
+        workout_list (list[dict]): Lista de diccionarios con registros de entrenamiento.
+
+    Returns:
+        pd.DataFrame: DataFrame de Pandas procesado, limpio y tipado.
+    """
+    # Columnas esperadas estándar en el DataFrame
+    expected_columns = ["fecha", "tipo", "duracion", "intensidad", "notas"]
+
+    # Caso borde: Lista vacía o entrada no válida
+    if not workout_list or not isinstance(workout_list, list):
+        return pd.DataFrame(columns=expected_columns)
+
+    try:
+        # Crear DataFrame inicial a partir de la lista
+        df = pd.DataFrame(workout_list)
+
+        # Caso borde: Columnas faltantes en el DataFrame de entrada
+        for col in expected_columns:
+            if col not in df.columns:
+                if col == "duracion":
+                    df[col] = 0
+                else:
+                    df[col] = "Desconocido"
+
+        # Asegurar tipos de datos adecuados
+        # 1. Limpiar y convertir columna de duración a numérico, rellenando nulos con 0 (Caso borde)
+        df["duracion"] = pd.to_numeric(df["duracion"], errors="coerce").fillna(0)
+
+        # 2. Convertir columna de fecha a datetime para permitir ordenamiento y análisis temporal
+        df["fecha"] = pd.to_datetime(df["fecha"], errors="coerce")
+
+        # Rellenar fechas inválidas o nulas con la fecha actual del sistema o un marcador
+        df["fecha"] = df["fecha"].fillna(pd.Timestamp.today())
+
+        # 3. Rellenar otros valores nulos de texto con cadenas genéricas
+        df["tipo"] = df["tipo"].fillna("General")
+        df["intensidad"] = df["intensidad"].fillna("Moderada")
+        df["notas"] = df["notas"].fillna("")
+
+        # Ordenar cronológicamente por fecha
+        df = df.sort_values("fecha").reset_index(drop=True)
+
+        return df
+
+    except Exception:
+        # En caso de cualquier error crítico de procesamiento, retornar DataFrame vacío seguro
+        return pd.DataFrame(columns=expected_columns)
+
+
+def generate_performance_chart(df: pd.DataFrame) -> Figure:
+    """
+    Crea un gráfico acumulativo de la duración e intensidad de los entrenamientos por fecha.
+
+    Casos borde gestionados:
+    - Si el DataFrame de entrada está vacío o no contiene filas, retorna una figura 
+      de Matplotlib con un mensaje visible indicando "Sin datos registrados".
+    - Si faltan columnas críticas, maneja la excepción visualizando el mensaje de aviso.
+
+    Args:
+        df (pd.DataFrame): DataFrame procesado con los datos de entrenamiento.
+
+    Returns:
+        matplotlib.figure.Figure: Objeto Figure listo para ser renderizado en Streamlit con st.pyplot.
+    """
+    # Crear la figura y los ejes de Matplotlib
+    fig, ax = plt.subplots(figsize=(10, 5))
+
+    # Caso borde: DataFrame vacío o sin registros
+    if df is None or df.empty or "fecha" not in df.columns or "duracion" not in df.columns:
+        ax.text(
+            0.5, 0.5, 
+            "Sin datos registrados para mostrar gráficos.", 
+            horizontalalignment='center', 
+            verticalalignment='center', 
+            transform=ax.transAxes, 
+            fontsize=12, 
+            color='gray',
+            weight='bold'
+        )
+        ax.set_axis_off()
+        return fig
+
+    try:
+        # Agrupar por fecha sumando la duración total de los entrenamientos diarios
+        # Se convierte la fecha a formato de cadena legible 'YYYY-MM-DD' para el eje X
+        df_grouped = df.copy()
+        df_grouped["fecha_str"] = df_grouped["fecha"].dt.strftime("%Y-%m-%d")
+        
+        summary_grouped = df_grouped.groupby("fecha_str")["duracion"].sum().reset_index()
+
+        # Configuración estética con colores sobrios corporativos/deportivos
+        bar_color = "#4C72B0"  # Azul sobrio
+        line_color = "#C44E52" # Tono de contraste para la línea de tendencia
+
+        # Gráfico de barras para la duración acumulada por día
+        ax.bar(
+            summary_grouped["fecha_str"], 
+            summary_grouped["duracion"], 
+            color=bar_color, 
+            alpha=0.85, 
+            label="Duración Total (min)"
+        )
+
+        # Línea de tendencia superpuesta para visualizar el progreso acumulativo
+        ax.plot(
+            summary_grouped["fecha_str"], 
+            summary_grouped["duracion"], 
+            color=line_color, 
+            marker="o", 
+            linewidth=2, 
+            label="Tendencia"
+        )
+
+        # Configuración de títulos y etiquetas en español
+        ax.set_title("Progreso de Entrenamientos: Duración por Fecha", fontsize=14, fontweight="bold", pad=15)
+        ax.set_xlabel("Fecha de Entrenamiento", fontsize=11, labelpad=10)
+        ax.set_ylabel("Duración Total (minutos)", fontsize=11, labelpad=10)
+
+        # Rotar etiquetas del eje X para evitar solapamiento si hay muchas fechas
+        plt.xticks(rotation=45, ha="right")
+
+        # Configuración de la cuadrícula y leyenda
+        ax.grid(True, linestyle="--", alpha=0.5)
+        ax.legend(loc="upper left")
+
+        # Ajustar diseño automáticamente para evitar cortes
+        fig.tight_layout()
+
+        return fig
+
+    except Exception:
+        # Caso borde de respaldo ante fallos de renderizado gráfico
+        ax.clear()
+        ax.text(
+            0.5, 0.5, 
+            "Error al generar la visualización de datos.", 
+            horizontalalignment='center', 
+            verticalalignment='center', 
+            transform=ax.transAxes, 
+            fontsize=12, 
+            color='red',
+            weight='bold'
+        )
+        ax.set_axis_off()
+        return fig

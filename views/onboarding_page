@@ -1,0 +1,136 @@
+"""
+Módulo de la vista de recolección de perfil y hábitos iniciales (Onboarding) para la app "100%LIFE".
+
+Este módulo renderiza un formulario interactivo en Streamlit para recopilar las
+medidas corporales, horarios y preferencias de actividad física de los estudiantes atletas,
+guardando los datos de forma persistente y estructurada.
+"""
+
+import streamlit as st
+from src.user_profile import save_user_profile
+
+
+def render_onboarding_page() -> None:
+    """
+    Renderiza la página de Onboarding en Streamlit para capturar el perfil inicial del usuario.
+
+    Funcionalidades:
+    - Despliega formularios interactivos para capturar medidas (peso en kg, estatura en cm).
+    - Captura horarios de estudio y horas disponibles.
+    - Presenta la pregunta condicional de actividad física: "¿Haces ejercicio?" con opciones:
+      "Sí", "No pero me gustaría", "No".
+    - Si la respuesta es "Sí", muestra un campo adicional para especificar el tipo de ejercicio.
+    - Valida y guarda la información invocando a src.user_profile.save_user_profile.
+
+    Casos borde gestionados:
+    - Valores numéricos negativos o cero en peso o estatura (valida con st.error antes de guardar).
+    - Envío parcial o campos obligatorios vacíos (bloquea el avance y notifica al usuario).
+    """
+    st.markdown("<h1 style='text-align: center;'>Configuración de tu Perfil - 100%LIFE 📋</h1>", unsafe_allow_html=True)
+    st.markdown(
+        "<p style='text-align: center; color: gray;'>"
+        "Para ofrecerte la mejor experiencia, necesitamos conocer un poco sobre tus medidas, horarios y hábitos."
+        "</p>",
+        unsafe_allow_html=True
+    )
+    st.markdown("---")
+
+    # Obtener el usuario actual desde el estado de la sesión
+    user_data = st.session_state.get('user_data', {})
+    username = user_data.get('username', '')
+
+    if not username:
+        st.error("Error de sesión: No se encontró un usuario activo. Por favor, inicia sesión nuevamente.")
+        if st.button("Ir al Login"):
+            st.session_state['authenticated'] = False
+            st.session_state['page'] = 'Login/Registro'
+            st.rerun()
+        return
+
+    # Contenedor principal del formulario de onboarding
+    with st.form(key="onboarding_form"):
+        st.subheader("1. Medidas Corporales")
+        col1, col2 = st.columns(2)
+        with col1:
+            peso_input = st.number_input("Peso (kg)", min_value=0.0, max_value=300.0, value=65.0, step=0.5)
+        with col2:
+            estatura_input = st.number_input("Estatura (cm)", min_value=0.0, max_value=250.0, value=170.0, step=1.0)
+
+        st.markdown("---")
+        st.subheader("2. Horarios y Disponibilidad")
+        col3, col4 = st.columns(2)
+        with col3:
+            horas_estudio = st.number_input("Horas de estudio diarias estimadas", min_value=0.0, max_value=16.0, value=6.0, step=0.5)
+        with col4:
+            horas_disponibles = st.number_input("Horas libres para deporte / descanso", min_value=0.0, max_value=16.0, value=2.0, step=0.5)
+
+        st.markdown("---")
+        st.subheader("3. Hábitos de Actividad Física")
+        
+        # Pregunta condicional principal
+        exercise_status_option = st.selectbox(
+            "¿Haces ejercicio actualmente?",
+            options=["Selecciona una opción...", "Sí", "No pero me gustaría", "No"]
+        )
+
+        # Variable para capturar el tipo de ejercicio si la respuesta es afirmativa
+        exercise_type_input = ""
+        if exercise_status_option == "Sí":
+            exercise_type_input = st.text_input(
+                "¿Qué tipo de ejercicio realizas?",
+                placeholder="Ej. American football, pesas, cardio, natación..."
+            )
+
+        st.markdown("---")
+        submit_onboarding = st.form_submit_button("Guardar Perfil y Continuar", use_container_width=True)
+
+    # Procesar el envío del formulario
+    if submit_onboarding:
+        # Caso borde: Validación de opción de ejercicio no seleccionada
+        if exercise_status_option == "Selecciona una opción...":
+            st.warning("Por favor, selecciona una respuesta válida para la pregunta de actividad física.")
+        # Caso borde: Valores numéricos negativos o cero en peso o estatura
+        elif peso_input <= 0 or estatura_input <= 0:
+            st.error("El peso y la estatura deben ser valores mayores a cero.")
+        elif horas_estudio < 0 or horas_disponibles < 0:
+            st.error("Las horas de estudio o disponibilidad no pueden ser negativas.")
+        # Caso borde: Si responde "Sí" pero deja el tipo de ejercicio vacío
+        elif exercise_status_option == "Sí" and not exercise_type_input.strip():
+            st.warning("Por favor, especifica qué tipo de ejercicio realizas.")
+        else:
+            # Estructurar los datos recolectados para guardarlos
+            measures_data = {
+                "peso_kg": float(peso_input),
+                "estatura_cm": float(estatura_input)
+            }
+
+            schedule_data = {
+                "horas_estudio": float(horas_estudio),
+                "horas_disponibles": float(horas_disponibles)
+            }
+
+            # Normalizar el estado de ejercicio para el backend
+            exercise_status_normalized = exercise_status_option
+            if exercise_type_input.strip():
+                exercise_status_normalized = f"Sí ({exercise_type_input.strip()})"
+
+            # Invocar la función del backend para guardar el perfil
+            success = save_user_profile(
+                username=username,
+                measures=measures_data,
+                schedule=schedule_data,
+                exercise_status=exercise_status_normalized
+            )
+
+            if success:
+                # Actualizar el estado de la sesión local con los nuevos datos
+                user_data['measures'] = measures_data
+                user_data['schedule'] = schedule_data
+                user_data['exercise_status'] = exercise_status_normalized
+                st.session_state['user_data'] = user_data
+
+                st.success("¡Perfil guardado exitosamente! Redirigiendo al Dashboard...")
+                st.session_state['page'] = 'Dashboard'
+                st.rerun()
+            else:
+                st.error("Ocurrió un error al guardar tu perfil en el sistema. Inténtalo de nuevo.")

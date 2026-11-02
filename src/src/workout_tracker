@@ -1,0 +1,169 @@
+"""
+Módulo para el registro y gestión de entrenamientos en la aplicación "100%LIFE".
+
+Este módulo permite registrar nuevas sesiones de entrenamiento y estiramientos
+asociadas a un usuario, así como consultar el historial completo de entrenamientos
+almacenados de forma persistente en la base de datos JSON del sistema.
+"""
+
+import os
+import json
+from datetime import datetime
+
+
+def _load_database(db_path: str) -> dict:
+    """
+    Carga la base de datos de usuarios desde un archivo JSON.
+
+    Args:
+        db_path (str): Ruta del archivo JSON de usuarios.
+
+    Returns:
+        dict: Diccionario con la estructura completa de la base de datos.
+    """
+    if not os.path.exists(db_path):
+        return {"users": {}}
+
+    try:
+        with open(db_path, "r", encoding="utf-8") as file:
+            data = json.load(file)
+            if not isinstance(data, dict) or "users" not in data:
+                return {"users": {}}
+            return data
+    except (json.JSONDecodeError, IOError):
+        # Caso borde: Archivo corrupto o ilegible, retorna estructura vacía por seguridad
+        return {"users": {}}
+
+
+def _save_database(db_path: str, data: dict) -> None:
+    """
+    Guarda el diccionario de la base de datos en el archivo JSON especificado.
+
+    Args:
+        db_path (str): Ruta del archivo JSON.
+        data (dict): Diccionario con los datos completos a guardar.
+    """
+    db_dir = os.path.dirname(db_path)
+    if db_dir and not os.path.exists(db_dir):
+        os.makedirs(db_dir, exist_ok=True)
+
+    with open(db_path, "w", encoding="utf-8") as file:
+        json.dump(data, file, indent=4, ensure_ascii=False)
+
+
+def log_workout(username: str, workout_data: dict, db_path: str = "data/users.json") -> bool:
+    """
+    Agrega un nuevo registro de entrenamiento (fecha, tipo, duración en minutos, intensidad, notas) 
+    al historial del usuario especificado.
+
+    Casos borde gestionados:
+    - Si el usuario no existe o el nombre de usuario está vacío, retorna False.
+    - Si la duración del entrenamiento es menor o igual a cero, se rechaza y retorna False.
+    - Si falta la fecha o está vacía/nula, se asigna automáticamente la fecha actual del sistema.
+    - Si el usuario no cuenta con una lista previa de entrenamientos ('workouts'), se inicializa.
+
+    Args:
+        username (str): Nombre único del usuario.
+        workout_data (dict): Diccionario con los datos del entrenamiento (ej. tipo, duracion, intensidad, notas, fecha).
+        db_path (str): Ruta al archivo JSON de almacenamiento.
+
+    Returns:
+        bool: True si el entrenamiento se guardó exitosamente, False en caso contrario.
+    """
+    # Caso borde: Nombre de usuario inválido o datos vacíos
+    if not username or not isinstance(workout_data, dict):
+        return False
+
+    clean_username = username.strip()
+    if not clean_username:
+        return False
+
+    # Caso borde: Validar la duración del entrenamiento (debe ser > 0 minutos)
+    duration = workout_data.get("duracion", 0)
+    try:
+        duration_int = int(duration)
+        if duration_int <= 0:
+            return False
+    except (ValueError, TypeError):
+        return False
+
+    # Cargar base de datos actual
+    db = _load_database(db_path)
+    users = db.get("users", {})
+
+    # Verificar que el usuario exista en el sistema
+    if clean_username not in users:
+        return False
+
+    # Preparar el registro del entrenamiento asegurando claves mínimas
+    user_record = users[clean_username]
+    
+    # Caso borde: Inicializar la lista de entrenamientos si no existe
+    if "workouts" not in user_record or not isinstance(user_record["workouts"], list):
+        user_record["workouts"] = []
+
+    # Caso borde: Validar o asignar la fecha actual del sistema si falta o es nula
+    workout_date = workout_data.get("fecha")
+    if not workout_date or not str(workout_date).strip():
+        workout_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    new_entry = {
+        "fecha": str(workout_date),
+        "tipo": workout_data.get("tipo", "General"),
+        "duracion": duration_int,
+        "intensidad": workout_data.get("intensidad", "Moderada"),
+        "notas": workout_data.get("notas", "")
+    }
+
+    # Agregar al historial del usuario
+    user_record["workouts"].append(new_entry)
+
+    try:
+        # Guardar los cambios persistentes en el archivo JSON
+        _save_database(db_path, db)
+        return True
+    except IOError:
+        return False
+
+
+def get_user_workouts(username: str, db_path: str = "data/users.json") -> list[dict]:
+    """
+    Recupera la lista histórica de todos los entrenamientos registrados por el usuario.
+
+    Casos borde gestionados:
+    - Si el usuario no existe, o no tiene registros previos ('workouts' ausente o vacío), 
+      debe retornar una lista vacía [].
+    - Si el nombre de usuario está vacío, retorna [].
+
+    Args:
+        username (str): Nombre de usuario cuyo historial se desea consultar.
+        db_path (str): Ruta al archivo JSON de almacenamiento.
+
+    Returns:
+        list[dict]: Lista de diccionarios con los entrenamientos registrados, 
+                    o una lista vacía si no hay registros o el usuario no existe.
+    """
+    # Caso borde: Nombre de usuario vacío o nulo
+    if not username:
+        return []
+
+    clean_username = username.strip()
+    if not clean_username:
+        return []
+
+    # Cargar base de datos
+    db = _load_database(db_path)
+    users = db.get("users", {})
+
+    # Caso borde: Usuario inexistente en la base de datos
+    if clean_username not in users:
+        return []
+
+    user_record = users[clean_username]
+    workouts = user_record.get("workouts", [])
+
+    # Caso borde: Si workouts no es una lista válida, retornar lista vacía
+    if not isinstance(workouts, list):
+        return []
+
+    return workouts

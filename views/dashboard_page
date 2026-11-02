@@ -1,0 +1,163 @@
+"""
+Módulo de la vista del Panel Interactivo (Dashboard) para la aplicación "100%LIFE".
+
+Este módulo renderiza la interfaz gráfica en Streamlit para que los estudiantes
+atletas puedan registrar sus sesiones de entrenamiento, visualizar su historial,
+consultar gráficos de rendimiento generados con Matplotlib y Pandas, y ver un
+resumen de su equilibrio entre el deporte y la vida cotidiana.
+"""
+
+import streamlit as st
+from datetime import datetime
+from src.workout_tracker import log_workout, get_user_workouts
+from src.analytics import create_workout_summary_df, generate_performance_chart
+
+
+def render_dashboard_page() -> None:
+    """
+    Renderiza la página del Dashboard interactivo en Streamlit.
+
+    Funcionalidades:
+    - Muestra un formulario para registrar nuevos entrenamientos (fecha, tipo, duración en minutos, intensidad, notas).
+    - Recupera el historial de entrenamientos con src.workout_tracker.get_user_workouts.
+    - Procesa los datos con src.analytics.create_workout_summary_df.
+    - Genera y renderiza gráficos estéticos usando src.analytics.generate_performance_chart con st.pyplot.
+    - Presenta un resumen visual del equilibrio entre entrenamientos y vida cotidiana del usuario.
+
+    Casos borde gestionados:
+    - Usuario sin registros previos de entrenamiento (muestra un mensaje amigable con st.info).
+    - Control de excepciones al registrar entrenamientos o generar gráficos para evitar caídas de la app.
+    """
+    # Obtener los datos del usuario activo en la sesión
+    user_data = st.session_state.get('user_data', {})
+    username = user_data.get('username', 'Atleta')
+
+    st.markdown(f"<h1 style='text-align: center;'>Panel de Control - 100%LIFE 📊</h1>", unsafe_allow_html=True)
+    st.markdown(
+        f"<p style='text-align: center; color: gray;'>"
+        f"¡Hola, <b>{username}</b>! Administra tus entrenamientos y mantén el equilibrio en tu vida estudiantil y deportiva."
+        "</p>",
+        unsafe_allow_html=True
+    )
+    st.markdown("---")
+
+    # Organizar el dashboard en dos columnas principales: Registro y Visualización/Gráficos
+    col_form, col_analytics = st.columns([1, 1.2], gap="large")
+
+    # ------------------------------------------------------------------
+    # Columna 1: Formulario para registrar nuevos entrenamientos
+    # ------------------------------------------------------------------
+    with col_form:
+        st.subheader("📝 Registrar Nuevo Entrenamiento")
+
+        with st.form(key="workout_form"):
+            workout_type = st.selectbox(
+                "Tipo de Ejercicio / Actividad",
+                options=["American Football", "Pesas / Fuerza", "Cardio / Running", "Natación", "Estiramientos / Movilidad", "Otro"]
+            )
+            
+            workout_duration = st.number_input(
+                "Duración (minutos)", 
+                min_value=1, 
+                max_value=360, 
+                value=60, 
+                step=5
+            )
+
+            workout_intensity = st.select_slider(
+                "Nivel de Intensidad",
+                options=["Baja", "Moderada", "Alta", "Máxima"],
+                value="Moderada"
+            )
+
+            workout_date = st.date_input(
+                "Fecha del entrenamiento",
+                value=datetime.now().date()
+            )
+
+            workout_notes = st.text_area(
+                "Notas o sensaciones (opcional)",
+                placeholder="Ej. Buen entrenamiento de bloqueo, buena hidratación..."
+            )
+
+            submit_workout = st.form_submit_button("Guardar Entrenamiento", use_container_width=True)
+
+        if submit_workout:
+            # Estructurar los datos del entrenamiento
+            workout_payload = {
+                "fecha": workout_date.strftime("%Y-%m-%d"),
+                "tipo": workout_type,
+                "duracion": int(workout_duration),
+                "intensidad": workout_intensity,
+                "notas": workout_notes.strip()
+            }
+
+            # Invocar la función del backend para registrar el entrenamiento
+            success = log_workout(username=username, workout_data=workout_payload)
+
+            if success:
+                st.success("¡Entrenamiento registrado exitosamente!")
+                st.rerun()
+            else:
+                st.error("Error al registrar el entrenamiento. Verifica que la duración sea mayor a cero.")
+
+    # ------------------------------------------------------------------
+    # Columna 2: Gráficos de Rendimiento y Análisis (Pandas + Matplotlib)
+    # ------------------------------------------------------------------
+    with col_analytics:
+        st.subheader("📈 Progreso y Rendimiento")
+
+        # Recuperar el historial de entrenamientos del usuario desde el backend
+        raw_workouts = get_user_workouts(username=username)
+
+        # Procesar la lista de entrenamientos usando Pandas (crea DataFrame limpio)
+        df_workouts = create_workout_summary_df(raw_workouts)
+
+        # Caso borde: Usuario sin registros previos de entrenamiento
+        if df_workouts.empty:
+            st.info(
+                "💡 **Aún no tienes entrenamientos registrados.** "
+                "Usa el formulario de la izquierda para añadir tu primera sesión y comenzar a visualizar tus gráficos de progreso."
+            )
+        else:
+            # Mostrar métricas rápidas resumidas usando columnas de Streamlit
+            total_sessions = len(df_workouts)
+            total_minutes = int(df_workouts["duracion"].sum())
+            
+            metric_col1, metric_col2 = st.columns(2)
+            metric_col1.metric("Sesiones Registradas", total_sessions)
+            metric_col2.metric("Minutos Totales", f"{total_minutes} min")
+
+            st.markdown("---")
+
+            # Control de excepciones al generar el gráfico para evitar caídas de la app
+            try:
+                fig = generate_performance_chart(df_workouts)
+                st.pyplot(fig, use_container_width=True)
+            except Exception as e:
+                st.error(f"No se pudo renderizar la gráfica de desempeño: {str(e)}")
+
+    # ------------------------------------------------------------------
+    # Sección Inferior: Resumen de Equilibrio entre Vida Cotidiana y Deporte
+    # ------------------------------------------------------------------
+    st.markdown("---")
+    st.subheader("⚖️ Balance Vida Académica y Deportiva")
+
+    schedule_info = user_data.get('schedule', {})
+    estudio_hrs = schedule_info.get('horas_estudio', 0)
+    disponibles_hrs = schedule_info.get('horas_disponibles', 0)
+
+    # Mostrar tarjetas informativas sobre el balance del estudiante atleta
+    bal_col1, bal_col2, bal_col3 = st.columns(3)
+    
+    with bal_col1:
+        st.metric("Horas de Estudio Diarias", f"{estudio_hrs} hrs", help="Registradas en tu onboarding")
+    with bal_col2:
+        st.metric("Horas Libres / Deporte", f"{disponibles_hrs} hrs", help="Espacio para entrenar y descansar")
+    with bal_col3:
+        st.metric("Estado de Bienestar", "Equilibrado 🌟", help="Meta principal de 100%LIFE")
+
+    st.info(
+        "💡 **Consejo 100%LIFE:** Recuerda alternar tus sesiones de entrenamiento intenso con momentos de "
+        "descanso adecuado y nutrición óptima para rendir al máximo tanto en el salón de clases como en el campo."
+    )

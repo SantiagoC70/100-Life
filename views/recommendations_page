@@ -1,0 +1,124 @@
+"""
+Módulo de la vista de recomendaciones de salud y rendimiento para la aplicación "100%LIFE".
+
+Este módulo renderiza la interfaz gráfica en Streamlit para mostrar de manera
+atractiva y estructurada las sugerencias personalizadas de rutinas, nutrición,
+hidratación y balance entre la vida académica y deportiva para los estudiantes atletas.
+"""
+
+import streamlit as st
+from src.recommendations import generate_recommendations
+
+
+def render_recommendations_page() -> None:
+    """
+    Renderiza la página de recomendaciones en Streamlit.
+
+    Funcionalidades:
+    - Carga los datos del usuario logueado desde st.session_state e invoca a 
+      src.recommendations.generate_recommendations para obtener las sugerencias adaptadas.
+    - Presenta los resultados organizados en contenedores visuales y columnas (st.columns, st.expander).
+    - Muestra las cuatro secciones diferenciadas: 
+      1. Rutina / Estiramientos / Progresión
+      2. Recomendaciones de Nutrición
+      3. Guía de Hidratación
+      4. Consejos de Balance Académico y Deportivo
+
+    Casos borde gestionados:
+    - Falta de datos en el perfil del usuario (muestra recomendaciones estandarizadas sin arrojar excepciones).
+    - Manejo de listas de consejos vacías asignando un texto informativo predeterminado.
+    """
+    # Título y encabezado principal de la página
+    st.markdown("<h1 style='text-align: center;'>Recomendaciones Personalizadas - 100%LIFE 💡</h1>", unsafe_allow_html=True)
+    st.markdown(
+        "<p style='text-align: center; color: gray;'>"
+        "Sugerencias diseñadas a tu medida para optimizar tu rendimiento académico, físico y tu bienestar integral."
+        "</p>",
+        unsafe_allow_html=True
+    )
+    st.markdown("---")
+
+    # Cargar datos del usuario logueado en la sesión
+    user_data = st.session_state.get('user_data', {})
+    username = user_data.get('username', 'Atleta')
+    exercise_status = user_data.get('exercise_status', 'No especificado')
+
+    # Mostrar tarjeta informativa del estado del usuario
+    st.info(f"👤 **Perfil actual de {username}:** Estado de actividad física: *{exercise_status}*")
+
+    # Caso borde: Si user_data está vacío o carece de información, la función generate_recommendations
+    # se encarga internamente de manejar el respaldo predeterminado sin lanzar excepciones.
+    recommendations_dict = generate_recommendations(user_data)
+
+    # Extraer las listas de recomendaciones de forma segura utilizando get
+    rutina_list = recommendations_dict.get("rutina", [])
+    nutricion_list = recommendations_dict.get("nutricion", [])
+    hidratacion_list = recommendations_dict.get("hidratacion", [])
+    balance_list = recommendations_dict.get("balance_vida", [])
+
+    # Organizar la visualización en dos columnas principales para mejor distribución en layout "wide"
+    col_left, col_right = st.columns(2, gap="large")
+
+    # ------------------------------------------------------------------
+    # Columna Izquierda: Rutina / Ejercicio y Nutrición
+    # ------------------------------------------------------------------
+    with col_left:
+        # Sección 1: Rutina, Estiramientos o Progresión
+        st.subheader("🏋️ Rutina y Rendimiento Físico")
+        with st.container(border=True):
+            # Caso borde: Lista vacía de rutina
+            if not rutina_list:
+                st.write("No hay recomendaciones de rutina disponibles en este momento.")
+            else:
+                for tip in rutina_list:
+                    st.markdown(f"* {tip}")
+
+        st.markdown("")
+
+        # Sección 2: Recomendaciones de Nutrición
+        st.subheader("🥗 Nutrición Inteligente")
+        with st.container(border=True):
+            # Caso borde: Lista vacía de nutrición
+            if not nutricion_list:
+                st.write("No hay recomendaciones de nutrición disponibles en este momento.")
+            else:
+                for tip in nutricion_list:
+                    st.markdown(f"* {tip}")
+
+    # ------------------------------------------------------------------
+    # Columna Derecha: Hidratación y Balance Académico/Deportivo
+    # ------------------------------------------------------------------
+    with col_right:
+        # Sección 3: Guía de Hidratación
+        st.subheader("💧 Guía de Hidratación")
+        with st.container(border=True):
+            # Caso borde: Lista vacía de hidratación
+            if not hidratacion_list:
+                st.write("No hay recomendaciones de hidratación disponibles en este momento.")
+            else:
+                for tip in hidratacion_list:
+                    st.markdown(f"* {tip}")
+
+        st.markdown("")
+
+        # Sección 4: Consejos de Balance Académico / Deportivo
+        st.subheader("⚖️ Balance Académico y Deportivo")
+        with st.container(border=True):
+            # Caso borde: Lista vacía de balance de vida
+            if not balance_list:
+                st.write("No hay consejos de balance disponibles en este momento.")
+            else:
+                for tip in balance_list:
+                    st.markdown(f"* {tip}")
+
+    # Sección expandible adicional para tips extra de motivación estudiantil-atleta
+    st.markdown("---")
+    with st.expander("🌟 Ver consejos adicionales para el éxito de un Estudiante Atleta"):
+        st.markdown(
+            "* **Constancia sobre intensidad:** Es mejor mantener hábitos pequeños todos los días que "
+            "esforzarse en exceso de manera esporádica.\n"
+            "* **Gestión del tiempo:** Utiliza bloques de estudio concentrado (Técnica Pomodoro) para "
+            "liberar tiempo de calidad para tus entrenamientos.\n"
+            "* **Escucha a tu cuerpo:** Si sientes fatiga extrema, prioriza el descanso y la recuperación; "
+            "el rendimiento óptimo requiere un equilibrio físico y mental."
+        )
